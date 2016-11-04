@@ -35,6 +35,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -447,8 +448,23 @@ public final class ServerService extends AbstractControllerService {
 
         @Override
         public synchronized void start(StartContext context) throws StartException {
-            executorService = new ThreadPoolExecutor(0, Integer.MAX_VALUE, 20L, TimeUnit.SECONDS,
-                    new SynchronousQueue<Runnable>(), threadFactory);
+            int maximumPoolSize = Integer.MAX_VALUE;
+            String maxThreads = WildFlySecurityManager.getPropertyPrivileged("org.jboss.server.services.maxThreads", null);
+            if (maxThreads != null && maxThreads.length() > 0) {
+                try {
+                    int max = Integer.decode(maxThreads);
+                    maximumPoolSize = Math.max(max, 1);
+                } catch(NumberFormatException ex) {
+                    ServerLogger.ROOT_LOGGER.failedToParseCommandLineInteger("org.jboss.server.services.maxThreads", maxThreads);
+                }
+            }
+            if (maximumPoolSize == Integer.MAX_VALUE) {
+                executorService = new ThreadPoolExecutor(0, maximumPoolSize, 20L, TimeUnit.SECONDS,
+                        new SynchronousQueue<Runnable>(), threadFactory);
+            } else {
+                executorService = new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 20L, TimeUnit.SECONDS,
+                        new LinkedBlockingQueue<Runnable>(), threadFactory);
+            }
         }
 
         @Override
